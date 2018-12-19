@@ -62,6 +62,7 @@ DatePickerDay.prototype.updateDay = function (disable, year, month, day) {
   this.day = day;
 
   this.domNode.innerHTML = day + 1;
+  this.domNode.setAttribute('aria-label', (day + 1) + ' ' + this.datepicker.months[this.month] + ' ' + this.year);
   this.domNode.setAttribute('tabindex', '-1');
   this.domNode.removeAttribute('aria-selected');
 
