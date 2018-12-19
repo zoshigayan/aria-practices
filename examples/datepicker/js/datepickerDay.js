@@ -37,12 +37,25 @@ DatePickerDay.prototype.init = function () {
 };
 
 DatePickerDay.prototype.isDisabled = function () {
-  return this.domNode.disabled;
+  return this.domNode.getAttribute('aria-disabled') == 'true';
+};
+
+DatePickerDay.prototype.setDisabled = function () {
+  return this.domNode.setAttribute('aria-disabled', 'true');
+};
+
+DatePickerDay.prototype.setEnabled = function () {
+  return this.domNode.setAttribute('aria-disabled', 'false');
 };
 
 DatePickerDay.prototype.updateDay = function (disable, year, month, day) {
 
-  this.domNode.disabled = disable;
+  if (disable) {
+    this.setDisabled();
+  }
+  else {
+    this.setEnabled();
+  }
 
   this.year = year;
   this.month = month;

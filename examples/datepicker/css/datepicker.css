@@ -124,42 +124,34 @@ table.dates td{
 
 .dateCell {
   outline:0;
-  border:0;
-  padding:0;
+  padding:1px;
   margin:0;
   height: 40px;
   width:40px;
-}
-
-.dateButton {
-  padding:0;
-  margin:0;
-  line-height: inherit;
-  height:100%;
-  width: 100%;
   border: 1px solid #EEE;
   border-radius:5px;
   font-size: 15px;
   background: #EEE;
 }
 
-.dateButton:focus,
-.dateButton:hover {
+
+.dateCell:focus,
+.dateCell:hover {
   padding:0;
   background-color:hsl(216, 80%, 92%);
 }
 
-.dateButton:focus {
+.dateCell:focus {
   border-width: 2px;
   border-color: rgb(100, 100, 100);
   outline:0;
 }
 
-.dateButton[aria-selected] {
+.dateCell[aria-selected] {
   border-color: rgb(100, 100, 100);
 }
 
-.dateButton[tabindex="0"] {
+.dateCell[tabindex="0"] {
   background-color:hsl(216, 80%, 92%);
 }
 
@@ -168,7 +160,7 @@ table.dates td{
   color: #afafaf;
 }
 
-.dateButton:disabled {
+.dateCell[aria-disabled="true"] {
   color: #777;
   background-color: #FFF;
   border: none;
