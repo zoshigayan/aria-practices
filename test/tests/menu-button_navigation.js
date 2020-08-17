@@ -1,4 +1,4 @@
-
+'use strict'
 
 const { ariaTest } = require('..');
 const { By, Key } = require('selenium-webdriver');
@@ -70,7 +70,34 @@ ariaTest('"aria-controls" attribute on menu button', exampleFile, 'button-aria-c
     await assertAriaControls(t, ex.menubuttonSelector);
 });
 
-ariaTest.failing('"aria-expanded" attribute on menu button', exampleFile, 'button-aria-expanded', async (t) => {
+ariaTest('"aria-expanded" attribute on menu button', exampleFile, 'button-aria-expanded', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+
+    const hasAttribute = await t.context.session.executeScript(function () {
+      selector = arguments[0];
+      return document.querySelector(selector).hasAttribute('aria-expanded');
+    }, ex.menubuttonSelectors[i]);
+
+    t.false(
+      hasAttribute,
+      'The menuitem should not have the "aria-expanded" attribute if the popup is closed'
+    );
+
+    t.false(
+      await t.context.session.findElement(By.css(ex.menuSelectors[i])).isDisplayed(),
+      'The popup should not be displayed if aria-expanded is false'
+    );
+
+    await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+
+    await assertAttributeValues(t, ex.menubuttonSelectors[i], 'aria-expanded', 'true');
+    t.true(
+      await t.context.session.findElement(By.css(ex.menuitemSelectors[i])).isDisplayed(),
+      'The popup should be displayed if aria-expanded is true for menu button ' + ex.menubuttonSelectors[i]
+    );
+  }
+
 });
 
 ariaTest('role="menu" on ul element', exampleFile, 'menu-role', async (t) => {
@@ -234,22 +261,99 @@ ariaTest('"escape" on role="menuitem"', exampleFile, 'menu-escape', async (t) =>
 
 });
 
-ariaTest.failing('"down arrow" on role="menuitem"', exampleFile, 'menu-down-arrow', async (t) => {
+ariaTest('"down arrow" on role="menuitem"', exampleFile, 'menu-down-arrow', async (t) => {
 
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
 
+    const items = await t.context.queryElements(t, ex.menuitemSelectors[i]);
+    for (let index = 0; index < items.length - 1; index++) {
+
+      await items[index].sendKeys(Key.ARROW_DOWN);
+
+      const itemText = await items[index].getText();
+      t.true(
+        await checkFocus(t, ex.menuitemSelectors[i], index + 1),
+        'down arrow on item "' + itemText + '" should put focus on the next item.'
+      );
+    }
+
+    await items[items.length - 1].sendKeys(Key.ARROW_DOWN);
+
+    const itemText = await items[items.length - 1].getText();
+    t.true(
+      await checkFocus(t, ex.menuitemSelectors[i], 0),
+      'down arrow on item "' + itemText + '" should put focus to first item on menu button ' + ex.menuitemSelectors[i]
+    );
+  }
 
 });
 
-ariaTest.failing('"up arrow" on role="menuitem"', exampleFile, 'menu-up-arrow', async (t) => {
+ariaTest('"up arrow" on role="menuitem"', exampleFile, 'menu-up-arrow', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+
+    const items = await t.context.queryElements(t, ex.menuitemSelectors[i]);
+
+    await items[0].sendKeys(Key.ARROW_UP);
+
+    const itemText = await items[0].getText();
+    t.true(
+      await checkFocus(t, ex.menuitemSelectors[i], items.length - 1),
+      'up arrow on item "' + itemText + '" should put focus to last item of menu button ' + ex.menuitemSelectors[i]
+    );
+
+    for (let index = items.length - 1; index > 0; index--) {
+
+      await items[index].sendKeys(Key.ARROW_UP);
+
+      const itemText = await items[index].getText();
+      t.true(
+        await checkFocus(t, ex.menuitemSelectors[i], index - 1),
+        'down arrow on item "' + itemText + '" should put focus on the previous item  of menu button ' + ex.menuitemSelectors[i]
+      );
+    }
+  }
 
 });
 
-ariaTest.failing('"home" on role="menuitem"', exampleFile, 'menu-home', async (t) => {
+ariaTest('"home" on role="menuitem"', exampleFile, 'menu-home', async (t) => {
 
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+
+    const items = await t.context.queryElements(t, ex.menuitemSelectors[i]);
+    for (let index = 0; index < items.length; index++) {
+
+      await items[index].sendKeys(Key.HOME);
+
+      const itemText = await items[index].getText();
+      t.true(
+        await checkFocus(t, ex.menuitemSelectors[i], 0),
+        'key home on item "' + itemText + '" should put focus on the first time for menu button ' + ex.menubuttonSelectors[i]
+      );
+    }
+  }
 });
 
-ariaTest.failing('"end" on role="menuitem"', exampleFile, 'menu-end', async (t) => {
+ariaTest('"end" on role="menuitem"', exampleFile, 'menu-end', async (t) => {
 
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+
+    const items = await t.context.queryElements(t, ex.menuitemSelectors[i]);
+    for (let index = 0; index < items.length; index++) {
+
+      await items[index].sendKeys(Key.END);
+
+      const itemText = await items[index].getText();
+      t.true(
+        await checkFocus(t, ex.menuitemSelectors[i], items.length - 1),
+        'key home on item "' + itemText + '" should put focus on the first time for menu button ' + ex.menubuttonSelectors[i]
+      );
+    }
+  }
 });
 
 ariaTest.failing('"character" on role="menuitem"', exampleFile, 'menu-character', async (t) => {
