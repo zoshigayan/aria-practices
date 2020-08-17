@@ -11,11 +11,20 @@ const exampleFile = 'menu-button/menu-button-navigation.html';
 
 const ex = {
   menubuttonSelector: '#ex1 button',
-  menuSelector1: '#id-menu-about',
-  menuSelector2: '#id-menu-admissions',
-  menuSelector3: '#id-menu-academics',
+  menubuttonSelectors: ['#id-mb-about', '#id-mb-admissions', '#id-mb-academics'],
+  menuSelectors: ['#id-menu-about', '#id-menu-admissions', '#id-menu-academics'],
+  menuitemSelectors: ['#id-menu-about [role="menuitem"]', '#id-menu-admissions [role="menuitem"]', '#id-menu-academics [role="menuitem"]'],
   menuitemSelector: '#ex1 [role="menuitem"]',
+  menuLength: [4, 6, 8],
   numMenuitems: 18
+};
+
+const checkFocus = function (t, selector, index) {
+  return t.context.session.executeScript(function () {
+    const [selector, index] = arguments;
+    let items = document.querySelectorAll(selector);
+    return items[index] === document.activeElement;
+  }, selector, index);
 };
 
 const waitForUrlChange = async function (t) {
@@ -25,6 +34,23 @@ const waitForUrlChange = async function (t) {
     });
   }, t.context.waitTime, 'Timeout waiting for url to update');
 };
+
+const openMenu = async function (t, menubuttonSelector, menuSelector) {
+  const expanded = await t.context.session
+    .findElement(By.css(menubuttonSelector))
+    .getAttribute('aria-expanded');
+
+  if (expanded !== 'true') {
+    await t.context.session
+      .findElement(By.css(menubuttonSelector))
+      .sendKeys(Key.ENTER);
+  }
+
+  return t.context.session.wait(async function () {
+    return t.context.session.findElement(By.css(menuSelector)).isDisplayed();
+  }, t.context.waitTime, 'Timeout waiting for menu to open after click');
+};
+
 
 // Attributes
 
@@ -44,9 +70,9 @@ ariaTest('role="menu" on ul element', exampleFile, 'menu-role', async (t) => {
 });
 
 ariaTest('"aria-labelledby" on role="menu"', exampleFile, 'menu-aria-labelledby', async (t) => {
-    await assertAriaLabelledby(t, ex.menuSelector1);
-    await assertAriaLabelledby(t, ex.menuSelector2);
-    await assertAriaLabelledby(t, ex.menuSelector3);
+  for (let i = 0; i < ex.menuSelectors.length; i++) {
+    await assertAriaLabelledby(t, ex.menuSelectors[i]);
+  }
 });
 
 ariaTest('role="none" on li element', exampleFile, 'none-role', async (t) => {
@@ -64,23 +90,106 @@ ariaTest('tabindex="-1" on role="menuitem"', exampleFile, 'menuitem-tabindex', a
 
 // Keys
 
-ariaTest.failing('"enter" on menu button', exampleFile, 'button-down-arrow-or-space-or-enter', async (t) => {
+ariaTest('"enter" on menu button', exampleFile, 'button-down-arrow-or-space-or-enter', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await t.context.session
+      .findElement(By.css(ex.menubuttonSelectors[i]))
+      .sendKeys(Key.ENTER);
+
+    t.true(
+      await t.context.session.findElement(By.css(ex.menuSelectors[i])).isDisplayed(),
+      'The popup should be displayed after sending button ENTER'
+    );
+
+    t.true(
+      await checkFocus(t, ex.menuitemSelectors[i], 0),
+      'Focus should be on first item after sending button ENTER'
+    );
+  }
 
 });
 
-ariaTest.failing('"down arrow" on menu button', exampleFile, 'button-down-arrow-or-space-or-enter', async (t) => {
+ariaTest('"down arrow" on menu button', exampleFile, 'button-down-arrow-or-space-or-enter', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await t.context.session
+      .findElement(By.css(ex.menubuttonSelectors[i]))
+      .sendKeys(Key.ARROW_DOWN);
+
+    t.true(
+      await t.context.session.findElement(By.css(ex.menuSelectors[i])).isDisplayed(),
+      'The popup should be displayed after sending button ARROW_DOWN'
+    );
+
+    t.true(
+      await checkFocus(t, ex.menuitemSelectors[i], 0),
+      'Focus should be on first item after sending button ARROW_DOWN'
+    );
+  }
 
 });
 
-ariaTest.failing('"space" on menu button', exampleFile, 'button-down-arrow-or-space-or-enter', async (t) => {
+ariaTest('"space" on menu button', exampleFile, 'button-down-arrow-or-space-or-enter', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await t.context.session
+      .findElement(By.css(ex.menubuttonSelectors[i]))
+      .sendKeys(' ');
+
+    t.true(
+      await t.context.session.findElement(By.css(ex.menuSelectors[i])).isDisplayed(),
+      'The popup should be displayed after sending button SPACE'
+    );
+
+    t.true(
+      await checkFocus(t, ex.menuitemSelectors[i], 0),
+      'Focus should be on first item after sending button SPACE'
+    );
+  }
 
 });
 
-ariaTest.failing('"up arrow" on menu button', exampleFile, 'button-up-arrow', async (t) => {
+ariaTest('"up arrow" on menu button', exampleFile, 'button-up-arrow', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    await t.context.session
+      .findElement(By.css(ex.menubuttonSelectors[i]))
+      .sendKeys(Key.ARROW_UP);
+
+    t.true(
+      await t.context.session.findElement(By.css(ex.menuSelectors[i])).isDisplayed(),
+      'The popup should be displayed after sending button ARROW_UP'
+    );
+
+    t.true(
+      await checkFocus(t, ex.menuitemSelectors[i], ex.menuLength[i]-1),
+      'Focus should be on last item after sending button ARROW_UP'
+    );
+  }
 
 });
 
-ariaTest.failing('"enter" on role="menuitem"', exampleFile, 'menu-enter', async (t) => {
+ariaTest('"enter" on role="menuitem"', exampleFile, 'menu-enter', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    for (let index = 0; index < ex.menuLength[i]; index++) {
+
+      // Return to test page
+      await t.context.session.get(t.context.url);
+      const item = (await t.context.queryElements(t, ex.menuitemSelectors[i]))[index];
+
+      await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+      await item.sendKeys(Key.ENTER);
+      await waitForUrlChange(t);
+
+      t.not(
+        await t.context.session.getCurrentUrl(),
+        t.context.url,
+        'Key enter when focus on list item at index ' + index + 'should active the link for menubutton ' + ex.menubuttonSelectors[i]
+      );
+    }
+  }
 
 });
 
