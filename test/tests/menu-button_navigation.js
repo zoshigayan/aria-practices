@@ -356,6 +356,39 @@ ariaTest('"end" on role="menuitem"', exampleFile, 'menu-end', async (t) => {
   }
 });
 
-ariaTest.failing('"character" on role="menuitem"', exampleFile, 'menu-character', async (t) => {
+ariaTest('"character" on role="menuitem"', exampleFile, 'menu-character', async (t) => {
+
+  const charIndexTest = [
+    [ { sendChar: 'f', sendIndex: 0, endIndex: 2 },
+      { sendChar: 'c', sendIndex: 2, endIndex: 3 },
+      { sendChar: 'c', sendIndex: 1, endIndex: 3 },
+      { sendChar: 'o', sendIndex: 4, endIndex: 0 }
+    ],
+    [ { sendChar: 'a', sendIndex: 0, endIndex: 0 },
+      { sendChar: 'v', sendIndex: 2, endIndex: 3 },
+      { sendChar: 'p', sendIndex: 3, endIndex: 4 },
+      { sendChar: 'a', sendIndex: 4, endIndex: 0 }
+    ],
+    [ { sendChar: 'h', sendIndex: 0, endIndex: 2 },
+      { sendChar: 'o', sendIndex: 2, endIndex: 3 },
+      { sendChar: 'c', sendIndex: 3, endIndex: 4 },
+      { sendChar: 'c', sendIndex: 4, endIndex: 0 }
+    ]];
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+
+    await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+    const items = await t.context.queryElements(t, ex.menuitemSelectors[i]);
+
+    for (let test of charIndexTest[i]) {
+      await items[test.sendIndex].sendKeys(test.sendChar);
+
+      t.true(
+        await checkFocus(t, ex.menuitemSelectors[i], test.endIndex),
+        'Sending character "' + test.sendChar + '" to item at index ' + test.sendIndex +
+          '" should put focus on item at index: ' + test.endIndex
+      );
+    }
+  }
 
 });
