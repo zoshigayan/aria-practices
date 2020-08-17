@@ -1,4 +1,4 @@
-'use strict';
+
 
 const { ariaTest } = require('..');
 const { By, Key } = require('selenium-webdriver');
@@ -51,7 +51,7 @@ const waitForUrlChange = async function (t) {
 const waitForNoAriaExpanded = async function (t) {
 
   return t.context.session.wait(async function () {
-    let ariaExpanded = await t.context.session.findElement(By.css(ex.menuSelector))
+    let ariaExpanded = await t.context.session.findElement(By.css(ex.menubuttonSelector))
       .getAttribute('aria-expanded');
     return ariaExpanded === null;
   }, t.context.waitTime, 'Timeout waiting for aria-expanded to be removed');

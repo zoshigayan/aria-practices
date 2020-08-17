@@ -51,6 +51,14 @@ const openMenu = async function (t, menubuttonSelector, menuSelector) {
   }, t.context.waitTime, 'Timeout waiting for menu to open after click');
 };
 
+const waitForNoAriaExpanded = async function (t, menubuttonSelector) {
+
+  return t.context.session.wait(async function () {
+    let ariaExpanded = await t.context.session.findElement(By.css(menubuttonSelector))
+      .getAttribute('aria-expanded');
+    return ariaExpanded === null;
+  }, t.context.waitTime, 'Timeout waiting for aria-expanded to be removed on ' + menubuttonSelector);
+};
 
 // Attributes
 
@@ -193,11 +201,42 @@ ariaTest('"enter" on role="menuitem"', exampleFile, 'menu-enter', async (t) => {
 
 });
 
-ariaTest.failing('"escape" on role="menuitem"', exampleFile, 'menu-escape', async (t) => {
+ariaTest('"escape" on role="menuitem"', exampleFile, 'menu-escape', async (t) => {
+
+  for (let i = 0; i < ex.menubuttonSelectors.length; i++) {
+    const items = await t.context.queryElements(t, ex.menuitemSelectors[i]);
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+
+      await openMenu(t, ex.menubuttonSelectors[i], ex.menuSelectors[i]);
+      await item.sendKeys(Key.ESCAPE);
+      await waitForNoAriaExpanded(t, ex.menubuttonSelectors[i]);
+
+      // fixes for running regression tests on windows
+      let url = t.context.url;
+      if (url.indexOf('\\') >= 0) {
+        url = url.replace(/\\/g, '/');
+        url = url.replace('file://C:', 'file:///C:');
+      }
+
+      t.is(
+        await t.context.session.getCurrentUrl(),
+        url,
+        'Key escape when focus on list item at index ' + index + ' should not activate the link on menubutton ' +  ex.menubuttonSelectors[i]
+      );
+
+      t.true(
+        await checkFocus(t, ex.menubuttonSelectors[i], 0),
+        'Key escape on item at index ' + index + ' should put focus back on menubutton ' +  ex.menubuttonSelectors[i]
+      );
+    }
+  }
 
 });
 
 ariaTest.failing('"down arrow" on role="menuitem"', exampleFile, 'menu-down-arrow', async (t) => {
+
+
 
 });
 
