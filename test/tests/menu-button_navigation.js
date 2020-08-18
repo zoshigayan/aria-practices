@@ -1,4 +1,4 @@
-'use strict'
+
 
 const { ariaTest } = require('..');
 const { By, Key } = require('selenium-webdriver');
@@ -362,7 +362,7 @@ ariaTest('"character" on role="menuitem"', exampleFile, 'menu-character', async 
     [ { sendChar: 'f', sendIndex: 0, endIndex: 2 },
       { sendChar: 'c', sendIndex: 2, endIndex: 3 },
       { sendChar: 'c', sendIndex: 1, endIndex: 3 },
-      { sendChar: 'o', sendIndex: 4, endIndex: 0 }
+      { sendChar: 'o', sendIndex: 3, endIndex: 0 }
     ],
     [ { sendChar: 'a', sendIndex: 0, endIndex: 0 },
       { sendChar: 'v', sendIndex: 2, endIndex: 3 },
