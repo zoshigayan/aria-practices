@@ -17,7 +17,8 @@
     "regression": "ava --timeout=1m",
     "regression-report": "node test/util/report",
     "test": "npm run lint && npm run regression",
-    "vnu-jar": "java -jar node_modules/vnu-jar/build/dist/vnu.jar --errors-only --filterfile .vnurc --no-langdetect --skip-non-html aria-practices.html examples/"
+    "vnu-jar": "java -jar node_modules/vnu-jar/build/dist/vnu.jar --errors-only --filterfile .vnurc --no-langdetect --skip-non-html aria-practices.html examples/",
+    "create-gh-project": "node ./scripts/create-gh-project.js"
   },
   "repository": {
     "type": "git",
@@ -31,6 +32,7 @@
   "homepage": "https://github.com/w3c/aria-practices#readme",
   "devDependencies": {
     "ava": "^3.13.0",
+    "babel-eslint": "^10.1.0",
     "cheerio": "^1.0.0-rc.2",
     "cspell": "^4.2.3",
     "eslint": "^7.14.0",
@@ -71,5 +73,8 @@
       "test/tests/*"
     ]
   },
-  "dependencies": {}
+  "dependencies": {
+    "@octokit/rest": "^18.0.12",
+    "dotenv": "^8.2.0"
+  }
 }
