@@ -6,6 +6,8 @@ const assertAriaRoles = require('../util/assertAriaRoles');
 const assertAttributeDNE = require('../util/assertAttributeDNE');
 const assertAttributeValues = require('../util/assertAttributeValues');
 const assertRovingTabindex = require('../util/assertRovingTabindex');
+const assertTabOrder = require('../util/assertTabOrder');
+const replaceExternalLink = require('../util/replaceExternalLink');
 
 const exampleFile = 'toolbar/toolbar.html';
 
@@ -26,43 +28,69 @@ const ex = {
   spinUpSelector: '#ex1 [role="spinbutton"] .increase',
   spinDownSelector: '#ex1 [role="spinbutton"] .decrease',
   spinTextSelector: '#ex1 [role="spinbutton"] .value',
-  checkboxSelector: '#ex1 .item',
-  linkSelector: '#ex1 [href]',
-  allToolSelectors: ['#ex1 .item'],
-  tabbableItemBeforeToolbarSelector: '[href="../../#toolbar"]',
-  tabbableItemAfterToolbarSelector: '[href="../../#kbd_roving_tabindex"]',
+  checkboxSelector: '#ex1 #checkbox',
+  linkSelector: '#ex1 #link',
+  tabbableItemBeforeToolbarSelector: '[href="../../#kbd_roving_tabindex"]',
+  textArea: '#ex1 textarea',
+  itemsWithPopups: [0, 1, 2, 3, 4, 5],
+  toggleItems: [0, 1, 2],
+  toggleItemStyle: {
+    0: {
+      style: 'fontWeight',
+      active: 'bold',
+      inactive: 'normal',
+    },
+    1: {
+      style: 'fontStyle',
+      active: 'italic',
+      inactive: 'normal',
+    },
+    2: {
+      style: 'textDecoration',
+      active: 'underline',
+      inactive: 'none',
+    },
+  },
+  radioItems: [3, 4, 5],
+  radioItemStyle: { 3: 'left', 4: 'center', 5: 'right' },
 };
 
-const clickAndWait = async function (t, selector) {
-  let element = await t.context.session.findElement(By.css(selector));
-  await element.click();
+const clickAndWait = async function (t, selector, index) {
+  index = index || 0;
+  let elements = await t.context.queryElements(t, selector);
+  await elements[index].click();
 
   return await t.context.session
     .wait(
       async function () {
-        let tabindex = await element.getAttribute('tabindex');
+        let tabindex = await elements[index].getAttribute('tabindex');
         return tabindex === '0';
       },
       t.context.waitTime,
-      'Timeout waiting for click to set tabindex="0" on: ' + selector
+      `Timeout waiting for click to set tabindex="0" on '${selector}' at index ${index}`
     )
     .catch((err) => {
       return err;
     });
 };
 
-const waitAndCheckFocus = async function (t, selector) {
+const waitAndCheckFocus = async function (t, selector, index) {
+  index = index || 0;
   return t.context.session
     .wait(
       async function () {
-        return t.context.session.executeScript(function () {
-          const [selector, index] = arguments;
-          let item = document.querySelector(selector);
-          return item === document.activeElement;
-        }, selector);
+        return t.context.session.executeScript(
+          function () {
+            const [selector, index] = arguments;
+            let items = document.querySelectorAll(selector);
+            return items[index] === document.activeElement;
+          },
+          selector,
+          index
+        );
       },
       t.context.waitTime,
-      'Timeout waiting for activeElement to become: ' + selector
+      `Timeout waiting for activeElement to become '${selector}' at index ${index}`
     )
     .catch((err) => {
       return err;
@@ -82,6 +110,18 @@ const waitAndCheckTabindex = async function (t, selector) {
     .catch((err) => {
       return err;
     });
+};
+
+const checkStyle = async function (t, style, value) {
+  return t.context.session.executeScript(
+    function () {
+      const [style, value] = arguments;
+      let textArea = document.querySelector('#ex1 textarea');
+      return textArea.style[style] === value;
+    },
+    style,
+    value
+  );
 };
 
 // Attributes
@@ -319,9 +359,18 @@ ariaTest(
       t,
       ex.fontFamilyMenuitemSelector
     );
+    let menu = await t.context.session.findElement(By.css(ex.menuSelector));
 
     for (let i = 0; i < menuItems.length; i++) {
       await menuButton.click();
+      await t.context.session.wait(
+        async function () {
+          return await menu.isDisplayed();
+        },
+        t.context.waitTime,
+        `Waiting for menu to open`
+      );
+
       await menuItems[i].click();
       await menuButton.click();
       for (let j = 0; j < menuItems.length; j++) {
@@ -462,169 +511,930 @@ ariaTest('', exampleFile, 'toolbar-spinbutton-aria-valuemax', async (t) => {
   await assertAttributeValues(t, ex.spinSelector, 'aria-valuemax', '40');
 });
 
-/*
-
 // Keys
 
 ariaTest('key TAB moves focus', exampleFile, 'toolbar-tab', async (t) => {
-  let numTools = ex.allToolSelectors.length;
+  await assertTabOrder(t, [
+    ex.tabbableItemBeforeToolbarSelector,
+    ex.itemSelector,
+    ex.textArea,
+  ]);
 
-  for (let index = 0; index < numTools; index++) {
-    let toolSelector = ex.allToolSelectors[index];
+  await (
+    await t.context.session.findElement(By.css(ex.alignmentButtonsSelector))
+  ).click();
 
-    // Click on element to set focus
-    await clickAndWait(t, toolSelector);
-
-    // Send tab key to element
-    await t.context.session.findElement(By.css(toolSelector))
-      .sendKeys(Key.TAB);
-
-    t.true(
-      await waitAndCheckFocus(t, ex.tabbableItemAfterToolbarSelector, index),
-      'Sending TAB to: ' + toolSelector + ' should move focus off toolbar'
-    );
-  }
+  await assertTabOrder(t, [
+    ex.tabbableItemBeforeToolbarSelector,
+    ex.alignmentButtonsSelector,
+    ex.textArea,
+  ]);
 });
 
-ariaTest('key LEFT ARROW moves focus', exampleFile, 'toolbar-left-arrow', async (t) => {
-  // Put focus on the first item in the list
-  await clickAndWait(t, ex.allToolSelectors[0]);
+ariaTest(
+  'key LEFT ARROW moves focus',
+  exampleFile,
+  'toolbar-left-arrow',
+  async (t) => {
+    // Put focus on the first item in the list
+    await clickAndWait(t, ex.itemSelector);
 
-  let numTools = ex.allToolSelectors.length;
-  let toolSelector = ex.allToolSelectors[0];
-  let nextToolSelector = ex.allToolSelectors[numTools - 1];
+    let items = await t.context.queryElements(t, ex.itemSelector);
 
-  // Send ARROW LEFT key to the first item
-  await t.context.session.findElement(By.css(toolSelector))
-    .sendKeys(Key.ARROW_LEFT);
+    // Send ARROW LEFT key to the first item
+    await items[0].sendKeys(Key.ARROW_LEFT);
 
-  // Focus should now be on last item
-  t.true(
-    await waitAndCheckFocus(t, nextToolSelector),
-    'Sending ARROW_RIGHT to tool "' + toolSelector + '" should move focus to "' +
-      nextToolSelector + '"'
-  );
-
-  t.true(
-    await waitAndCheckTabindex(t, nextToolSelector),
-    'Sending ARROW_RIGHT to tool "' + toolSelector + '" should set tabindex on "' +
-      nextToolSelector + '"'
-  );
-
-
-  // Confirm right arrow moves focus to the previous item
-  for (let index = numTools - 1; index > 0; index--) {
-    let toolSelector = ex.allToolSelectors[index];
-    let nextToolSelector = ex.allToolSelectors[index + 1];
-
-    // Send ARROW LEFT key
-    await t.context.session.findElement(By.css(toolSelector))
-      .sendKeys(Key.ARROW_LEFT);
-
+    // Focus should now be on last item
     t.true(
-      await waitAndCheckFocus(t, nextToolSelector),
-      'Sending ARROW_RIGHT to tool "' + toolSelector + '" should move focus to "' +
-        nextToolSelector + '"'
+      await waitAndCheckFocus(t, ex.itemSelector, items.length - 1),
+      `Sending ARROW_LEFT to item at index 0 should move focus to item at index ${
+        items.length - 1
+      }`
     );
 
+    t.is(
+      await items[items.length - 1].getAttribute('tabindex'),
+      '0',
+      `Sending ARROW_LEFT to item at index 0 should set tabindex=0 for item at index ${
+        items.length - 1
+      }`
+    );
+
+    for (let i = items.length - 1; i > 0; i--) {
+      await items[i].sendKeys(Key.ARROW_LEFT);
+
+      t.true(
+        await waitAndCheckFocus(t, ex.itemSelector, i - 1),
+        `Sending ARROW_LEFT to item at index ${i} should move focus to item at index ${
+          i - 1
+        }`
+      );
+
+      t.is(
+        await items[i - 1].getAttribute('tabindex'),
+        '0',
+        `Sending ARROW_LEFT to item at index ${i} should set tabindex=0 for item at index ${
+          i - 1
+        }`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'key RIGHT ARROW moves focus',
+  exampleFile,
+  'toolbar-right-arrow',
+  async (t) => {
+    // Put focus on the first item in the list
+    await clickAndWait(t, ex.itemSelector);
+
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    for (let i = 0; i < items.length - 2; i++) {
+      await items[i].sendKeys(Key.ARROW_RIGHT);
+
+      t.true(
+        await waitAndCheckFocus(t, ex.itemSelector, i + 1),
+        `Sending ARROW_RIGHT to item at index ${i} should move focus to item at index ${
+          i + 1
+        }`
+      );
+
+      t.is(
+        await items[i + 1].getAttribute('tabindex'),
+        '0',
+        `Sending ARROW_RIGHT to item at index ${i} should set tabindex=0 for item at index ${
+          i + 1
+        }`
+      );
+    }
+
+    // Send ARROW RIGHT key to the last item
+    await items[items.length - 1].sendKeys(Key.ARROW_RIGHT);
+
+    // Focus should now be on first
     t.true(
-      await waitAndCheckTabindex(t, nextToolSelector),
-      'Sending ARROW_RIGHT to tool "' + toolSelector + '" should set tabindex on "' +
-        nextToolSelector + '"'
+      await waitAndCheckFocus(t, ex.itemSelector, 0),
+      `Sending ARROW_RIGHT to the last item should move focus to the first item`
+    );
+
+    t.is(
+      await items[0].getAttribute('tabindex'),
+      '0',
+      `Sending ARROW_RIGHT to the last item should set tabindex=0 for the first item at index`
     );
   }
-
-});
-
-ariaTest('key RIGHT ARROW moves focus', exampleFile, 'toolbar-right-arrow', async (t) => {
-  // Put focus on the first item in the list
-  await clickAndWait(t, ex.allToolSelectors[0]);
-
-  let numTools = ex.allToolSelectors.length;
-
-  // Confirm right arrow moves focus to the next item
-  for (let index = 0; index < numTools - 1; index++) {
-    let toolSelector = ex.allToolSelectors[index];
-    let nextToolSelector = ex.allToolSelectors[index + 1];
-
-    // Send ARROW RIGHT key
-    await t.context.session.findElement(By.css(toolSelector))
-      .sendKeys(Key.ARROW_RIGHT);
-
-    t.true(
-      await waitAndCheckFocus(t, nextToolSelector),
-      'Sending ARROW_RIGHT to tool "' + toolSelector + '" should move focus to "' +
-        nextToolSelector + '"'
-    );
-
-    t.true(
-      await waitAndCheckTabindex(t, nextToolSelector),
-      'Sending ARROW_RIGHT to tool "' + toolSelector + '" should set tabindex on "' +
-        nextToolSelector + '"'
-    );
-  }
-
-  let toolSelector = ex.allToolSelectors[numTools - 1];
-  let nextToolSelector = ex.allToolSelectors[0];
-
-  // Send ARROW RIGHT key to the last item
-  await t.context.session.findElement(By.css(toolSelector))
-    .sendKeys(Key.ARROW_RIGHT);
-
-  // Focus should now be on first item
-  t.true(
-    await waitAndCheckFocus(t, nextToolSelector),
-    'Sending ARROW_RIGHT to tool "' + toolSelector + '" should move focus to "' +
-      nextToolSelector + '"'
-  );
-
-  t.true(
-    await waitAndCheckTabindex(t, nextToolSelector),
-    'Sending ARROW_RIGHT to tool "' + toolSelector + '" should set tabindex on "' +
-      nextToolSelector + '"'
-  );
-});
+);
 
 ariaTest('key HOME moves focus', exampleFile, 'toolbar-home', async (t) => {
-  let numTools = ex.allToolSelectors.length;
+  let items = await t.context.queryElements(t, ex.itemSelector);
 
-  // Confirm right moves HOME focus to first item
-  for (let index = 0; index < numTools - 1; index++) {
-    let toolSelector = ex.allToolSelectors[index];
-
-    // Click on element to focus
-    await clickAndWait(t, toolSelector);
-
-    // Send HOME key to the last item
-    await t.context.session.findElement(By.css(toolSelector))
-      .sendKeys(Key.HOME);
+  for (let i = 0; i < items.length; i++) {
+    await items[i].sendKeys(Key.HOME);
 
     t.true(
-      await waitAndCheckFocus(t, ex.allToolSelectors[0], index),
-      'Sending HOME to tool "' + toolSelector + '" should move focus to first tool'
+      await waitAndCheckFocus(t, ex.itemSelector, 0),
+      `Sending HOME to item at index ${i} should move focus to the first item`
+    );
+
+    t.is(
+      await items[0].getAttribute('tabindex'),
+      '0',
+      `Sending HOME to item at index ${i} should set tabindex=0 on the first item`
     );
   }
 });
 
 ariaTest('key END moves focus', exampleFile, 'toolbar-end', async (t) => {
-  let numTools = ex.allToolSelectors.length;
+  let items = await t.context.queryElements(t, ex.itemSelector);
 
-  // Confirm right moves HOME focus to first item
-  for (let index = 0; index < numTools - 1; index++) {
-    let toolSelector = ex.allToolSelectors[index];
-
-    // Click on element to focus
-    await clickAndWait(t, toolSelector);
-
-    // Send HOME key to the last item
-    await t.context.session.findElement(By.css(toolSelector))
-      .sendKeys(Key.HOME);
+  for (let i = 0; i < items.length; i++) {
+    await items[i].sendKeys(Key.END);
 
     t.true(
-      await waitAndCheckFocus(t, ex.allToolSelectors[0], index),
-      'Sending HOME to tool "' + toolSelector + '" should move focus to first tool'
+      await waitAndCheckFocus(t, ex.itemSelector, items.length - 1),
+      `Sending END to item at index ${i} should move focus to the last item`
+    );
+
+    t.is(
+      await items[items.length - 1].getAttribute('tabindex'),
+      '0',
+      `Sending END to item at index ${i} should set tabindex=0 on the last item`
     );
   }
 });
 
-*/
+ariaTest(
+  'key ESCAPE closes popup',
+  exampleFile,
+  'toolbar-toggle-esc',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    for (let i of ex.itemsWithPopups) {
+      await clickAndWait(t, ex.itemSelector, i);
+
+      let popup = await items[i].findElement(By.css('span.popup-label'));
+      t.true(
+        await popup.isDisplayed(),
+        `Clicking menu item ${i} should display a popup and is not, this test might be broken.`
+      );
+
+      await items[i].sendKeys(Key.ESCAPE);
+
+      t.false(
+        await popup.isDisplayed(),
+        `Sending key ESCAPE to menuitem ${i} should close popup label.`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Key ENTER toggles toggle buttons',
+  exampleFile,
+  'toolbar-toggle-enter-or-space',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    for (let i of ex.toggleItems) {
+      await items[i].sendKeys(Key.ENTER);
+
+      t.is(
+        await items[i].getAttribute('aria-pressed'),
+        'true',
+        `Sending enter to inactive toggle at index ${i} should set aria-pressed to true`
+      );
+      t.true(
+        await checkStyle(
+          t,
+          ex.toggleItemStyle[i].style,
+          ex.toggleItemStyle[i].active
+        ),
+        `Sending enter to inactive toggle at index ${i} should set the style ${ex.toggleItemStyle[i].style} in the text area to ${ex.toggleItemStyle[i].active}`
+      );
+
+      await items[i].sendKeys(Key.ENTER);
+
+      t.is(
+        await items[i].getAttribute('aria-pressed'),
+        'false',
+        `Sending enter to active toggle at index ${i} should set aria-pressed to false`
+      );
+      t.true(
+        await checkStyle(
+          t,
+          ex.toggleItemStyle[i].style,
+          ex.toggleItemStyle[i].inactive
+        ),
+        `Sending enter to active toggle at index ${i} should set the style ${ex.toggleItemStyle[i].style} in the text area to ${ex.toggleItemStyle[i].inactive}.`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Key SPACE toggles toggle buttons',
+  exampleFile,
+  'toolbar-toggle-enter-or-space',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    for (let i of ex.toggleItems) {
+      await items[i].sendKeys(Key.SPACE);
+
+      t.is(
+        await items[i].getAttribute('aria-pressed'),
+        'true',
+        `Sending space to inactive toggle at index ${i} should set aria-pressed to true`
+      );
+      t.true(
+        await checkStyle(
+          t,
+          ex.toggleItemStyle[i].style,
+          ex.toggleItemStyle[i].active
+        ),
+        `Sending space to inactive toggle at index ${i} should set the style ${ex.toggleItemStyle[i].style} in the text area to ${ex.toggleItemStyle[i].active}`
+      );
+
+      await items[i].sendKeys(Key.SPACE);
+
+      t.is(
+        await items[i].getAttribute('aria-pressed'),
+        'false',
+        `Sending space to active toggle at index ${i} should set aria-pressed to false`
+      );
+      t.true(
+        await checkStyle(
+          t,
+          ex.toggleItemStyle[i].style,
+          ex.toggleItemStyle[i].inactive
+        ),
+        `Sending space to active toggle at index ${i} should set the style ${ex.toggleItemStyle[i].style} in the text area to ${ex.toggleItemStyle[i].inactive}.`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Key ENTER selects radio option for alignment',
+  exampleFile,
+  'toolbar-radio-enter-or-space',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    for (let i of ex.radioItems) {
+      await items[i].sendKeys(Key.ENTER);
+
+      t.is(
+        await items[i].getAttribute('aria-checked'),
+        'true',
+        `Sending enter to item at index ${i} should set aria-checked to true`
+      );
+      t.true(
+        await checkStyle(t, 'textAlign', ex.radioItemStyle[i]),
+        `Sending enter to radio index ${i} should set the style 'textAlign' style in the text area to ${ex.radioItemStyle[i]}}`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Key SPACE selects radio option for alignment',
+  exampleFile,
+  'toolbar-radio-enter-or-space',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    for (let i of ex.radioItems) {
+      await items[i].sendKeys(Key.SPACE);
+
+      t.is(
+        await items[i].getAttribute('aria-checked'),
+        'true',
+        `Sending SPACE to item at index ${i} should set aria-checked to true`
+      );
+      t.true(
+        await checkStyle(t, 'textAlign', ex.radioItemStyle[i]),
+        `Sending SPACE to radio index ${i} should set the style 'textAlign' style in the text area to ${ex.radioItemStyle[i]}}`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Key DOWN ARROW moves focus between radio text align items',
+  exampleFile,
+  'toolbar-radio-down-arrow',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    await items[ex.radioItems[0]].sendKeys(Key.ARROW_DOWN);
+
+    for (let i of ex.radioItems.slice(1)) {
+      t.true(
+        await waitAndCheckFocus(t, ex.itemSelector, i),
+        `Sending ARROW DOWN to radio item at index ${
+          i - 1
+        } should move focus to item at index ${i}`
+      );
+
+      t.is(
+        await items[i].getAttribute('tabindex'),
+        '0',
+        `Sending ARROW DOWN to radio item at index ${
+          i - 1
+        } should set tabindex=0 for item at index ${i}`
+      );
+
+      await items[i].sendKeys(Key.ARROW_DOWN);
+    }
+
+    // Focus should now be on first
+    t.true(
+      await waitAndCheckFocus(t, ex.itemSelector, ex.radioItems[0]),
+      `Sending ARROW DOWN to the last radio item should move focus to the first radio item`
+    );
+
+    t.is(
+      await items[ex.radioItems[0]].getAttribute('tabindex'),
+      '0',
+      `Sending ARROW DOWN to the last radio item should set tabindex=0 for the first radio item`
+    );
+  }
+);
+
+ariaTest(
+  'Key UP ARROW moves focus between radio text align items',
+  exampleFile,
+  'toolbar-radio-up-arrow',
+  async (t) => {
+    let items = await t.context.queryElements(t, ex.itemSelector);
+
+    await items[ex.radioItems[0]].sendKeys(Key.ARROW_UP);
+
+    let lastItemIndex = ex.radioItems.length - 1;
+
+    t.true(
+      await waitAndCheckFocus(t, ex.itemSelector, ex.radioItems[lastItemIndex]),
+      `Sending ARROW UP to the first radio item should move focus to the last radio item`
+    );
+
+    t.is(
+      await items[ex.radioItems[lastItemIndex]].getAttribute('tabindex'),
+      '0',
+      `Sending ARROW UP to the first radio item should set tabindex=0 for the last radio item`
+    );
+
+    for (let i of ex.radioItems.slice(1).reverse()) {
+      await items[i].sendKeys(Key.ARROW_UP);
+
+      t.true(
+        await waitAndCheckFocus(t, ex.itemSelector, i - 1),
+        `Sending ARROW UP to radio item at index ${i} should move focus to item at index ${
+          i - 1
+        }`
+      );
+
+      t.is(
+        await items[i - 1].getAttribute('tabindex'),
+        '0',
+        `Sending ARROW UP to radio item at index ${i} should set tabindex=0 for item at index ${
+          i - 1
+        }`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Test key enter on copy/past/cut keys',
+  exampleFile,
+  'toolbar-button-enter-or-space',
+  async (t) => {
+    let textarea = await t.context.session.findElement(By.css('textarea'));
+    await textarea.sendKeys(Key.chord(Key.CONTROL, 'a'));
+    let originalText = await textarea.getAttribute('value');
+
+    const buttons = await t.context.queryElements(
+      t,
+      ex.textEditButtonsSelector
+    );
+    const copy = 0;
+    const paste = 1;
+    const cut = 2;
+
+    t.is(
+      await buttons[copy].getAttribute('aria-disabled'),
+      'false',
+      'After selecting text'
+    );
+    t.is(
+      await buttons[paste].getAttribute('aria-disabled'),
+      'true',
+      'After selecting text'
+    );
+    t.is(
+      await buttons[cut].getAttribute('aria-disabled'),
+      'false',
+      'After selecting text'
+    );
+
+    // SEND ENTER TO COPY
+    await buttons[copy].sendKeys(Key.ENTER);
+
+    t.is(
+      await buttons[copy].getAttribute('aria-disabled'),
+      'false',
+      'After copy'
+    );
+    t.is(
+      await buttons[paste].getAttribute('aria-disabled'),
+      'false',
+      'After copy'
+    );
+    t.is(
+      await buttons[cut].getAttribute('aria-disabled'),
+      'false',
+      'After copy'
+    );
+
+    // SEND ENTER TO CUT
+    await buttons[cut].sendKeys(Key.ENTER);
+
+    t.is(
+      await buttons[copy].getAttribute('aria-disabled'),
+      'true',
+      'After cut'
+    );
+    t.is(
+      await buttons[paste].getAttribute('aria-disabled'),
+      'false',
+      'After cut'
+    );
+    t.is(await buttons[cut].getAttribute('aria-disabled'), 'true', 'After cut');
+
+    await t.context.session.wait(
+      async function () {
+        return (await textarea.getAttribute('value')) === '';
+      },
+      t.context.waitTime,
+      `Timeout waiting for sending ENTER to cut to clear text in textarea`
+    );
+    t.is(
+      await textarea.getAttribute('value'),
+      '',
+      'After cut, there should be no text in the text area'
+    );
+
+    // SEND ENTER TO PASTE
+    await buttons[paste].sendKeys(Key.ENTER);
+
+    t.is(
+      await textarea.getAttribute('value'),
+      originalText,
+      'After paste, there should be the previous text in the text area'
+    );
+  }
+);
+
+ariaTest(
+  'Test key space on copy/past/cut keys',
+  exampleFile,
+  'toolbar-button-enter-or-space',
+  async (t) => {
+    let textarea = await t.context.session.findElement(By.css('textarea'));
+    await textarea.sendKeys(Key.chord(Key.CONTROL, 'a'));
+    let originalText = await textarea.getAttribute('value');
+
+    const buttons = await t.context.queryElements(
+      t,
+      ex.textEditButtonsSelector
+    );
+    const copy = 0;
+    const paste = 1;
+    const cut = 2;
+
+    t.is(
+      await buttons[copy].getAttribute('aria-disabled'),
+      'false',
+      'After selecting text'
+    );
+    t.is(
+      await buttons[paste].getAttribute('aria-disabled'),
+      'true',
+      'After selecting text'
+    );
+    t.is(
+      await buttons[cut].getAttribute('aria-disabled'),
+      'false',
+      'After selecting text'
+    );
+
+    // SEND SPACE TO COPY
+    await buttons[copy].sendKeys(Key.SPACE);
+
+    t.is(
+      await buttons[copy].getAttribute('aria-disabled'),
+      'false',
+      'After copy'
+    );
+    t.is(
+      await buttons[paste].getAttribute('aria-disabled'),
+      'false',
+      'After copy'
+    );
+    t.is(
+      await buttons[cut].getAttribute('aria-disabled'),
+      'false',
+      'After copy'
+    );
+
+    // SEND SPACE TO CUT
+    await buttons[cut].sendKeys(Key.SPACE);
+
+    t.is(
+      await buttons[copy].getAttribute('aria-disabled'),
+      'true',
+      'After cut'
+    );
+    t.is(
+      await buttons[paste].getAttribute('aria-disabled'),
+      'false',
+      'After cut'
+    );
+    t.is(await buttons[cut].getAttribute('aria-disabled'), 'true', 'After cut');
+
+    await t.context.session.wait(
+      async function () {
+        return (await textarea.getAttribute('value')) === '';
+      },
+      t.context.waitTime,
+      `Timeout waiting for sending SPACE to cut to clear text in textarea`
+    );
+    t.is(
+      await textarea.getAttribute('value'),
+      '',
+      'After cut, there should be no text in the text area'
+    );
+
+    // SEND SPACE TO PASTE
+    await buttons[paste].sendKeys(Key.SPACE);
+
+    t.is(
+      await textarea.getAttribute('value'),
+      originalText,
+      'After paste, there should be the previous text in the text area'
+    );
+  }
+);
+
+ariaTest(
+  'Keys for opening menubutton',
+  exampleFile,
+  'toolbar-menubutton-enter-or-space-or-down-or-up',
+  async (t) => {
+    const menubutton = await t.context.session.findElement(
+      By.css(ex.fontFamilyButtonSelector)
+    );
+    const menu = await t.context.session.findElement(By.css(ex.menuSelector));
+
+    for (let key of [Key.ENTER, Key.SPACE, Key.ARROW_UP, Key.ARROW_DOWN]) {
+      await menubutton.sendKeys(key);
+
+      t.true(
+        await menu.isDisplayed(),
+        `After sending key ${key} the menu should be displayed`
+      );
+
+      t.true(
+        await waitAndCheckFocus(t, ex.fontFamilyMenuitemSelector, 0),
+        `After sending key ${key} the focus should be on the first item`
+      );
+
+      // Close the menu by clicking outside of it
+      await (await t.context.session.findElement(By.css('#ex_label'))).click();
+    }
+
+    // Select a different font family, and confirm that opening the submenu puts focus on selected font family
+
+    await menubutton.sendKeys(Key.ENTER);
+    await (
+      await t.context.queryElements(t, ex.fontFamilyMenuitemSelector)
+    )[1].click();
+
+    for (let key of [Key.ENTER, Key.SPACE, Key.ARROW_UP, Key.ARROW_DOWN]) {
+      await menubutton.sendKeys(key);
+
+      t.true(
+        await menu.isDisplayed(),
+        `After sending key ${key} the menu should be displayed`
+      );
+
+      t.true(
+        await waitAndCheckFocus(t, ex.fontFamilyMenuitemSelector, 1),
+        `Now that the second font has been selected, after sending key ${key} the focus should be on the second item`
+      );
+
+      // Close the menu by clicking outside of it
+      await (await t.context.session.findElement(By.css('#ex_label'))).click();
+    }
+  }
+);
+
+ariaTest(
+  'Key ENTER changes font',
+  exampleFile,
+  'toolbar-menu-enter-or-space',
+  async (t) => {
+    const menubutton = await t.context.session.findElement(
+      By.css(ex.fontFamilyButtonSelector)
+    );
+    const menuitems = await t.context.queryElements(
+      t,
+      ex.fontFamilyMenuitemSelector
+    );
+
+    for (let i = 0; i < menuitems.length; i++) {
+      await menubutton.sendKeys(Key.ENTER);
+      let font = await menuitems[i].getText();
+      await menuitems[i].sendKeys(Key.ENTER);
+      t.true(
+        await checkStyle(t, 'fontFamily', font.toLowerCase()),
+        `The font family in the text area should be updated to reflect the menuitem ('${font}') when sending key 'ENTER'`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'Key SPACE changes font',
+  exampleFile,
+  'toolbar-menu-enter-or-space',
+  async (t) => {
+    const menubutton = await t.context.session.findElement(
+      By.css(ex.fontFamilyButtonSelector)
+    );
+    const menuitems = await t.context.queryElements(
+      t,
+      ex.fontFamilyMenuitemSelector
+    );
+
+    for (let i = 0; i < menuitems.length; i++) {
+      await menubutton.sendKeys(Key.SPACE);
+      let font = await menuitems[i].getText();
+      await menuitems[i].sendKeys(Key.SPACE);
+      t.true(
+        await checkStyle(t, 'fontFamily', font.toLowerCase()),
+        `The font family in the text area should be updated to reflect the menuitem ('${font}') when sending key 'SPACE'`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'DOWN ARROW moves focus between menuitems',
+  exampleFile,
+  'toolbar-menu-down-arrow',
+  async (t) => {
+    const menubutton = await t.context.session.findElement(
+      By.css(ex.fontFamilyButtonSelector)
+    );
+    const menuitems = await t.context.queryElements(
+      t,
+      ex.fontFamilyMenuitemSelector
+    );
+
+    await menubutton.sendKeys(Key.ENTER);
+
+    for (let i = 0; i < menuitems.length - 1; i++) {
+      await menuitems[i].sendKeys(Key.ARROW_DOWN);
+
+      t.true(
+        await waitAndCheckFocus(t, ex.fontFamilyMenuitemSelector, i + 1),
+        `Sending ARROW DOWN to menuitem at index ${i} should move focus to item at index ${
+          i + 1
+        }`
+      );
+    }
+
+    await menuitems[menuitems.length - 1].sendKeys(Key.ARROW_DOWN);
+
+    t.true(
+      await waitAndCheckFocus(t, ex.fontFamilyMenuitemSelector, 0),
+      `Sending ARROW DOWN to the last menu item should move focus to the first menu item`
+    );
+  }
+);
+
+ariaTest(
+  'UP ARROW moves focus',
+  exampleFile,
+  'toolbar-menu-up-arrow',
+  async (t) => {
+    const menubutton = await t.context.session.findElement(
+      By.css(ex.fontFamilyButtonSelector)
+    );
+    const menuitems = await t.context.queryElements(
+      t,
+      ex.fontFamilyMenuitemSelector
+    );
+
+    await menubutton.sendKeys(Key.ENTER);
+    await menuitems[0].sendKeys(Key.ARROW_UP);
+
+    t.true(
+      await waitAndCheckFocus(
+        t,
+        ex.fontFamilyMenuitemSelector,
+        menuitems.length - 1
+      ),
+      `Sending ARROW UP to the first menu item should move focus to the last menu item`
+    );
+
+    for (let i = menuitems.length - 1; i > 0; i--) {
+      await menuitems[i].sendKeys(Key.ARROW_UP);
+
+      t.true(
+        await waitAndCheckFocus(t, ex.fontFamilyMenuitemSelector, i - 1),
+        `Sending ARROW UP to menuitem at index ${i} should move focus to item at index ${
+          i - 1
+        }`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'ESC sent to menuitem closes menu',
+  exampleFile,
+  'toolbar-menu-escape',
+  async (t) => {
+    const menubutton = await t.context.session.findElement(
+      By.css(ex.fontFamilyButtonSelector)
+    );
+    const menu = await t.context.session.findElement(By.css(ex.menuSelector));
+    const menuitems = await t.context.queryElements(
+      t,
+      ex.fontFamilyMenuitemSelector
+    );
+
+    for (let i = menuitems.length - 1; i > 0; i--) {
+      await menubutton.sendKeys(Key.ENTER);
+      await menuitems[i].sendKeys(Key.ESCAPE);
+
+      t.true(
+        await waitAndCheckFocus(t, ex.fontFamilyButtonSelector),
+        `Sending ESCAPE to menuitem at index ${i} should move focus to the font family menubutton`
+      );
+      t.false(
+        await menu.isDisplayed(),
+        `Sending ESCAPE to menuitem at index ${i} should close the menu`
+      );
+    }
+  }
+);
+
+ariaTest(
+  'DOWN ARROW to spinbutton decrease value by 1',
+  exampleFile,
+  'toolbar-spinbutton-down-arrow',
+  async (t) => {
+    const spinbutton = await t.context.session.findElement(
+      By.css(ex.spinSelector)
+    );
+
+    const originalValue = await spinbutton.getAttribute('aria-valuenow');
+    spinbutton.sendKeys(Key.ARROW_DOWN);
+
+    await t.context.session.wait(
+      async function () {
+        return (
+          (await spinbutton.getAttribute('aria-valuenow')) !== originalValue
+        );
+      },
+      t.context.waitTime,
+      'Timeout waiting for aria-valuenow value to change'
+    );
+
+    let valuenow = await spinbutton.getAttribute('aria-valuenow');
+
+    t.is(
+      parseInt(valuenow),
+      parseInt(originalValue) - 1,
+      `Sending down arrow to the spin button should switch the value to one less than the original value`
+    );
+    t.true(
+      await checkStyle(t, 'fontSize', `${valuenow}pt`),
+      `Sending down arrow to the spin button should switch the textarea's fontSize styling`
+    );
+  }
+);
+
+ariaTest(
+  'UP ARROW to spin button increase value by 1',
+  exampleFile,
+  'toolbar-spinbutton-up-arrow',
+  async (t) => {
+    const spinbutton = await t.context.session.findElement(
+      By.css(ex.spinSelector)
+    );
+
+    const originalValue = await spinbutton.getAttribute('aria-valuenow');
+    spinbutton.sendKeys(Key.ARROW_UP);
+
+    await t.context.session.wait(
+      async function () {
+        return (
+          (await spinbutton.getAttribute('aria-valuenow')) !== originalValue
+        );
+      },
+      t.context.waitTime,
+      'Timeout waiting for aria-valuenow value to change'
+    );
+
+    let valuenow = await spinbutton.getAttribute('aria-valuenow');
+    t.is(
+      parseInt(valuenow),
+      parseInt(originalValue) + 1,
+      `Sending up arrow to the spin button should switch the value to one more than the original value`
+    );
+
+    t.true(
+      await checkStyle(t, 'fontSize', `${valuenow}pt`),
+      `Sending up arrow to the spin button should switch the textarea's fontSize styling`
+    );
+  }
+);
+
+ariaTest(
+  'PAGE DOWN to spin button decrease value by 5',
+  exampleFile,
+  'toolbar-spinbutton-page-down',
+  async (t) => {
+    const spinbutton = await t.context.session.findElement(
+      By.css(ex.spinSelector)
+    );
+
+    const originalValue = await spinbutton.getAttribute('aria-valuenow');
+    spinbutton.sendKeys(Key.PAGE_DOWN);
+
+    await t.context.session.wait(
+      async function () {
+        return (
+          (await spinbutton.getAttribute('aria-valuenow')) !== originalValue
+        );
+      },
+      t.context.waitTime,
+      'Timeout waiting for aria-valuenow value to change'
+    );
+
+    let valuenow = await spinbutton.getAttribute('aria-valuenow');
+    t.is(
+      parseInt(valuenow),
+      parseInt(originalValue) - 5,
+      `Sending up arrow to the spin button should switch the value to five less than the original value`
+    );
+
+    t.true(
+      await checkStyle(t, 'fontSize', `${valuenow}pt`),
+      `Sending up arrow to the spin button should switch the textarea's fontSize styling`
+    );
+  }
+);
+ariaTest(
+  'PAGE UP to spin button increase by 5',
+  exampleFile,
+  'toolbar-spinbutton-page-up',
+  async (t) => {
+    const spinbutton = await t.context.session.findElement(
+      By.css(ex.spinSelector)
+    );
+
+    const originalValue = await spinbutton.getAttribute('aria-valuenow');
+    spinbutton.sendKeys(Key.PAGE_UP);
+
+    await t.context.session.wait(
+      async function () {
+        return (
+          (await spinbutton.getAttribute('aria-valuenow')) !== originalValue
+        );
+      },
+      t.context.waitTime,
+      'Timeout waiting for aria-valuenow value to change'
+    );
+
+    let valuenow = await spinbutton.getAttribute('aria-valuenow');
+    t.is(
+      parseInt(valuenow),
+      parseInt(originalValue) + 5,
+      `Sending up arrow to the spin button should switch the value to one more than the original value`
+    );
+
+    t.true(
+      await checkStyle(t, 'fontSize', `${valuenow}pt`),
+      `Sending up arrow to the spin button should switch the textarea's fontSize styling`
+    );
+  }
+);
